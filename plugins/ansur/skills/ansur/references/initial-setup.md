@@ -9,11 +9,18 @@ when the token expires.
 - **CLI** — `@ansur-ai/cli` is on the public npm registry. Install the `ansur`
   binary globally:
   ```bash
-  npm install -g @ansur-ai/cli
+  npm install -g @ansur-ai/cli@latest   # @latest avoids a stale-cache no-op on an old global
   ansur --version
   ```
-  (Single bin `ansur`, no runtime deps.) Point it at a non-default platform with
-  `--endpoint <url>` or `ANSUR_ENDPOINT`.
+  (Single bin `ansur`, no runtime deps.)
+- **Endpoint — set this first.** The CLI defaults to `http://127.0.0.1:8080`
+  (local dev). For a **hosted** platform you MUST point it at the real URL, or
+  every command (`login` included) hits localhost and fails with a connection
+  error. Set it once for the session:
+  ```bash
+  export ANSUR_ENDPOINT=https://<your-platform-host>   # e.g. https://demo.useansur.com
+  ```
+  (or pass `--endpoint <url>` per command).
 - **Plugin** — this skill ships in the `ansur` Claude Code plugin. If you're
   reading this, it's already loaded.
 - **`gh` (GitHub CLI)** — needed only for a **personal-account** GitHub link, to
@@ -33,8 +40,11 @@ browser, and polls until you approve. The bearer token is cached in the config
 dir (`~/.config/ansur/` by default), so later commands are already authed.
 
 ```bash
-ansur login
+ANSUR_ENDPOINT=https://<your-platform-host> ansur login   # or export it (step 0)
 ```
+
+If `login` errors with a connection refused at `127.0.0.1:8080`, the endpoint
+isn't set — see step 0. Your email must also be on the platform's beta allowlist.
 
 ## 2. Create the tenant — `ansur init "<Org>"`
 
