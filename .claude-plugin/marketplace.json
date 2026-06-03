@@ -1,0 +1,13 @@
+{
+	"name": "ansur",
+	"owner": { "name": "Ansur" },
+	"description": "The Ansur Claude Code plugin — turn this coding agent into the meta-harness that builds and operates AI employees on the Ansur platform.",
+	"plugins": [
+		{
+			"name": "ansur",
+			"source": "./plugins/ansur",
+			"description": "Build and operate AI employees on the Ansur platform. Drives the `ansur` CLI to set up a tenant, connect systems, author a bundle, ship it, and wire a channel.",
+			"homepage": "https://useansur.com"
+		}
+	]
+}
