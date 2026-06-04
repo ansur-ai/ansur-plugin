@@ -135,8 +135,14 @@ ansur guards clone       # later: re-clone the repo to edit (native git auth)
 `guards init` requires `ansur github connect` first (the owner comes from the
 installation). The App **creates** the repo, so it auto-joins the installation —
 no manual access grant. Each `<system>/rules.yaml` lands as `mode: observe` with
-commented examples; edit, then **`git commit && git push`**. The running guard
-rolls onto the new policy on its next reconcile / hot-reload (or pin a commit with
+commented examples; edit, then — **ALWAYS run `ansur guards validate` before you
+`git commit && git push`.** It runs the guard's *own* policy loader against every
+`<system>/rules.yaml` (invalid `decode:`, malformed expression, missing judge
+`prompt_file`) and exits non-zero on any error. This is not optional: a bad
+`rules.yaml` makes the guard **fail closed (CrashLoopBackOff) at boot**, so the
+push silently does NOT take effect — the guard keeps serving its last-good policy
+and you get no signal. Validate first, fix what it reports, then push. The running
+guard rolls onto the new policy on its next reconcile (or pin a commit with
 `ansur guard pin`). If GitHub is connected to a **personal account** (not an org),
 the App can't auto-create the repo — `guards init` returns an actionable error.
 The agent runs `gh repo create <login>/guards --private` (empty), adds it to the
