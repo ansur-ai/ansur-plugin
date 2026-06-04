@@ -149,6 +149,28 @@ Two things the model hinges on:
 Author rules under `mode: observe` first, watch the audit for `wouldBlock`
 flags, then flip to `gated` / `enforced` once the rules cover the real traffic.
 
+### Judge rules (LLM checks) — the model is the platform's, not yours
+
+A `judge:` rule sends the decoded payload to an LLM with your rubric
+(`prompt_file`, e.g. `judges/tone.md`) and acts on the verdict
+(`on_reject`/`on_accept`/`on_needs_approval`). Two non-obvious facts:
+
+- **The judge model is platform config — and if it's missing, judge rules block
+  everything.** The judge calls the platform's central LLM router (Brain) using a
+  model the *operator* pins (`GUARD_JUDGE_MODEL`). If the platform hasn't wired a
+  judge model, **every judge rule fails closed — it rejects every matching call**,
+  regardless of how good your rubric is. So if a judge rule is blocking
+  everything, suspect *platform judge config* before your prompt. You author the
+  **rubric**; the platform owns the **model** (it runs on platform credits, not
+  the tenant's).
+- **You may request a per-rule `model:`, but it's bounded.** A judge rule can name
+  a `model:`, but it's honored only if the operator allowlisted it; otherwise the
+  platform's pinned model is used. Don't depend on a specific model unless you've
+  confirmed it's allowed.
+
+Write the rubric and the verdict actions; treat "is a judge model wired?" as an
+operator question, not something the bundle or guards repo can fix.
+
 ### Provisioning the repo — `ansur guards init`
 
 The guards repo doesn't exist until you create it. Until it does, every guard
