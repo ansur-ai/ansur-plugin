@@ -1,6 +1,5 @@
 {
 	"name": "ansur",
-	"version": "0.0.1",
 	"description": "Build and operate AI employees on the Ansur platform. Turns this coding agent into the meta-harness: it drives the `ansur` CLI to set up a tenant, connect systems, author a bundle, ship it, and wire a channel.",
 	"author": { "name": "Ansur", "url": "https://useansur.com" },
 	"homepage": "https://useansur.com"
