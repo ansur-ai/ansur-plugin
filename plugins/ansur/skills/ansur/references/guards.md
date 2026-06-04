@@ -120,6 +120,35 @@ derives it from the installation, so you never name it by hand.
 Because one guard serves every agent in the tenant, scope a rule to specific
 agents inside `rules.yaml` via the `agents:` / `groups:` rule scope.
 
+### `mode:` — and what happens when no rule matches
+
+The top of `rules.yaml` declares one `mode:` for the whole file. It governs the
+**borderline** cases (an uncovered write, a held-for-approval verdict, a body the
+guard couldn't decode). An explicit `reject_if` that fires is a **403 in both
+`gated` and `enforced`** — mode only changes the borderline disposition:
+
+| | `observe` (scaffold default) | `gated` | `enforced` |
+|---|---|---|---|
+| explicit `reject_if` true | forward + log "would block" | **403** | **403** |
+| **write with no matching rule** | forward + log | **hold for human** approve/deny | **403** |
+| needs-approval / undecodable body | forward + log | **hold for human** | **403** |
+| read (`GET`/`HEAD`), or a covered call that passed | forward | forward | forward |
+
+Two things the model hinges on:
+
+- **Reads pass by default; writes fail closed.** A `POST`/`PUT`/`DELETE` that **no
+  rule's `on:` matches** is treated as an *uncovered write* — denied under
+  `enforced`, held under `gated`. So under enforcement, **every write you want to
+  allow needs an explicit rule**; silence = deny. A `GET`/`HEAD` with no rule is
+  forwarded (write a rule if you want to gate reads too).
+- **`gated` puts a human in the loop; `enforced` is autonomous.** Pick `gated`
+  when a person should approve borderline sends; `enforced` when the agent should
+  be hard-blocked with no wait. `observe` blocks nothing — it's for harvesting what
+  *would* be blocked before you commit to a boundary.
+
+Author rules under `mode: observe` first, watch the audit for `wouldBlock`
+flags, then flip to `gated` / `enforced` once the rules cover the real traffic.
+
 ### Provisioning the repo — `ansur guards init`
 
 The guards repo doesn't exist until you create it. Until it does, every guard
