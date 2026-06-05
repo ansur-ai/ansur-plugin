@@ -76,10 +76,17 @@ Rules the runtime enforces:
 
 ## Gotchas
 
-- **Live at the next idle turn, not mid-turn** — skills reload with the rest of
-  the bundle: a push rebuilds the agent at the new commit on its next idle access,
-  re-scanning `skills/`. A skill added during a turn isn't visible until that
-  rebuild — but you don't need a restart.
+- **Patch-existing takes effect this session; create-new does not.** The `##
+  Available Skills` catalog (the `name — description` list in the prompt) is scanned
+  **once per session** and frozen; the `skill` tool, by contrast, re-reads
+  `<name>/SKILL.md` from disk on **every call**. So editing an *already-listed* skill
+  takes effect the next time it's loaded this session, but a **brand-new** skill is
+  absent from the frozen catalog — the employee can't reliably find it by name until
+  the registry rebuilds (next session / new bundle commit SHA). Treat "save this as
+  a skill" as a future-session affordance, not an in-session one.
+- **Live at the next idle turn, not mid-turn** — bundle changes (incl. the catalog
+  rebuild above) land when the agent rebuilds at the new commit on its next idle
+  access, never mid-turn. No restart needed.
 - **Missing `description` = silently skipped.** If a skill never loads, check the
   frontmatter first.
 - A skill the employee "seems to use" without a `skill` tool call is **prompt

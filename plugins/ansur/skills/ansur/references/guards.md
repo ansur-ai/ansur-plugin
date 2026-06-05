@@ -89,8 +89,25 @@ connectors:
 Validation: every `kind` must come from `ansur connector list --available`;
 duplicate `kind` is rejected (one guard per kind).
 
+**Connector `kind:` vs guards-repo `<system>/` dir** — these names differ. The
+bundle and `connector add` use the **catalog** name; the guards repo and
+`ansur guard pin` use the **wire guard-system** name:
+
+| `connectors.yaml` / `connector add` | Guards repo dir / `guard pin` |
+|---|---|
+| `gmail` | `gmail/` |
+| `web-search` | `web-search/` |
+| `sap` | `sap-service-layer/` (writes) **and** `sap-hana/` (reads) |
+
+Author policy under the **right-hand** path. A `guards/gmail/` dir does nothing
+for an agent that only connects `sap`. **`sap` fans out to two guard-systems** —
+one connector, two policy dirs — and the read path (`sap-hana/`) needs an
+agent→role `groups:` mapping or it 403s. See **`references/sap.md`**.
+
 > The bundle's `connectors.yaml` says *which* systems the employee may reach.
 > Guard **policy** (what each call may do) lives in a **different repo** — see below.
+> The legacy `extension: guards/<system>/` field in `connectors.yaml` still parses
+> but the wire path **ignores** it — do not author bundle-local `guards/`.
 
 ## Guard policy lives in the per-tenant `<tenant>/guards` repo
 
@@ -145,9 +162,63 @@ Two things the model hinges on:
   when a person should approve borderline sends; `enforced` when the agent should
   be hard-blocked with no wait. `observe` blocks nothing — it's for harvesting what
   *would* be blocked before you commit to a boundary.
+- **`approve_if` / judge `needs_approval` only hold under `gated`.** Under
+  `enforced`, any `needs_approval` verdict (explicit `approve_if`, judge, or the
+  gated-unknown fallback) becomes a terminal **403** — no hold, no Approve/Deny
+  buttons. Under `observe`, explicit `approve_if` still **forwards** (audit-only).
+  Human-in-the-loop email/SAP writes ⇒ **`mode: gated`**, not `enforced`.
 
 Author rules under `mode: observe` first, watch the audit for `wouldBlock`
 flags, then flip to `gated` / `enforced` once the rules cover the real traffic.
+
+### Human-in-the-loop — `approve_if` in `<tenant>/guards` (load-bearing)
+
+When the employee can **write** to an external system (Gmail send, SAP POST, …)
+and a human must tap **Approve/Deny** before the side effect happens, you need
+**two** artifacts — the guard policy *and* the bundle notify destination (below).
+Setting only one leaves either silent forwards or approve buttons with nowhere to go.
+
+**1. Guard policy** (`<tenant>/guards/<system>/rules.yaml`) — use `mode: gated`
+and an explicit rule whose `approve_if` matches the writes you want held. For
+Gmail outbound send (the common case), a minimal policy is:
+
+```yaml
+mode: gated
+
+rules:
+  - name: outbound-send-needs-approval
+    on: { method: POST, path: /gmail/v1/users/me/messages/send }
+    decode: rfc822
+    approve_if: "true"
+    reason: outbound send requires human approval
+```
+
+`approve_if: "true"` means every matching send queues for approval (the expression
+language treats `"true"` as a literal). Narrow it later (`approve_if: count(payload.to) > 5`,
+competitor-domain checks, etc.) — start broad when bootstrapping. Scope with
+`agents:` / `groups:` when only some agents may send.
+
+Without a matching rule under `gated`, an uncovered write still holds for approval
+via the mode fallback — but an explicit `approve_if` rule is clearer, shows up in
+audit with your `reason:`, and is what you want for “always approve sends.”
+
+Validate before push: `ansur guards validate`, then `git commit && git push` in the
+guards repo. See `packages/gmail-wire-adapter/examples/gmail/rules.yaml` for richer
+examples (competitor blocks, judges).
+
+**2. Bundle notify destination** — guard buttons are delivered to
+`manifest.yaml` → `approvals.notify` in the **agent bundle** (not the guards repo).
+That wiring is documented in `references/bundle.md`. Also required on the platform
+side: **`ansur channel bind telegram …`** for that agent — proactive notify sends
+through the **bound bot's token** to `approvals.notify.address` (the chat id can
+be the operator's private chat, not the group the employee serves).
+
+**3. Text fallback (no buttons).** The operator can always type `approve` / `deny`
+(or `approve <apr_…>`) in the **same Telegram chat** as the employee when a turn
+is parked — even without `approvals.notify`. Buttons are the upgrade; the text
+commands are the stopgap.
+
+Push **both** repos after edits: guards policy does not live in the bundle push.
 
 ### Judge rules (LLM checks) — the model is the platform's, not yours
 
@@ -181,7 +252,15 @@ gated on this one-time step:
 ansur guards init        # create <accountLogin>/guards, seed an audit-only
                           # <system>/rules.yaml per connected system, then clone it
 ansur guards clone       # later: re-clone the repo to edit (native git auth)
+ansur guards validate    # offline check before every push (same loader as boot)
 ```
+
+Run **`guards init` after `connector add`** — it seeds one `<system>/` dir per
+*currently connected* wire guard-system. If the repo already exists,
+`guards init` returns `repo_not_empty` — use `guards clone` and add missing
+`<system>/` trees by hand (copy the shape from `guards init`'s scaffold or the
+examples under `packages/*-wire-adapter/examples/`). Connecting a new system later
+does **not** auto-create its policy dir.
 
 `guards init` requires `ansur github connect` first (the owner comes from the
 installation). The App **creates** the repo, so it auto-joins the installation —
@@ -213,12 +292,13 @@ token — see `bundle.md`), then re-runs `guards init`.
 |---|---|---|---|
 | `gmail` | oauth-identity | Gmail REST | **Live.** Injects the tenant's OAuth bearer. |
 | `web-search` | capability | Exa | **Live.** Platform-owned key; strips any agent-supplied `x-api-key`. The customer never sees "exa." |
-| `sap` | byok-identity | tenant's SAP Service Layer (per-tenant origin, pasted) | **Write path live**, HANA reads pending. |
+| `sap` | byok-identity | tenant's SAP Service Layer (writes, 50000) + HANA (reads, 30015) | **Live, both paths.** Writes via `sap-service-layer/`, reads via `sap-hana/`. Set connection config at connect time: `connector add sap --config '{"upstreamOrigin":…,"allowedCompanyDbs":[…],"defaultCompanyDb":…}'`. Two policy dirs + a required read role mapping + a HANA grant — the full recipe is **`references/sap.md`**. |
 | `browser` | capability | Browserbase (CDP) | **Separate broker track — NOT wired to the wire-guard reconciler.** `kind: browser` parses but opens no wire egress today. |
 | `slack` | oauth-identity | — | **Catalog only** — wire adapter pending. |
 
-So `gmail`, `web-search`, and `sap` (writes) are what actually works through the
-wire path. Don't tell a customer `browser` or `slack` "just works" like gmail.
+So `gmail`, `web-search`, and `sap` (reads + writes) are what actually works
+through the wire path. Don't tell a customer `browser` or `slack` "just works"
+like gmail.
 
 ## Production policy pins — `ansur guard pin`
 
@@ -234,8 +314,10 @@ ansur guard unpin sap                 # resume tracking main
 ## Author does vs. platform does
 
 - **You (author):** declare the `kind:` list in the bundle's `connectors.yaml`;
-  optionally write `<system>/` rules + judges in the **`<tenant>/guards` repo**.
-  The customer/operator runs `connector add` to connect the account.
+  optionally write `<system>/` rules + judges in the **`<tenant>/guards` repo**
+  (for human-in-the-loop writes: `mode: gated` + `approve_if` **and** bundle
+  `manifest.yaml` `approvals.notify` — see above). The customer/operator runs
+  `connector add` to connect the account.
 - **Platform (automatic):** the guard image + decode logic, mTLS identity, the
   credential store + per-request brokering, OAuth refresh, the rule/judge engine,
   audit, guard creation/teardown, and the sandbox egress NetworkPolicy.

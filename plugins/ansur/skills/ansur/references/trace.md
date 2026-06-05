@@ -55,6 +55,9 @@ jq 'select(.toolCalls) | .toolCalls[] | select(.status=="blocked")' "$F"
 # Guard verdicts at the wire
 jq 'select(.kind=="audit") | {ts, type, policyVersion, payload}' "$F"
 
+# Guard approval queue (needs_approval / approve / deny)
+jq 'select(.kind=="audit" and (.type | test("approval"))) | {ts, type, payload}' "$F"
+
 # What the employee wrote to memory/skills
 jq 'select(.assetsCommitted) | {at:.startedAt, .assetsCommitted}' "$F"
 ```
@@ -65,6 +68,9 @@ jq 'select(.assetsCommitted) | {at:.startedAt, .assetsCommitted}' "$F"
   ⇒ seed `memory/`. Missing a step ⇒ tighten `prompt.md` or add a `skill`.
 - **A call was `blocked`?** A hook or guard stopped it — check `references/hooks.md`
   / `references/guards.md` and the matching `audit` record.
+- **Expected Approve/Deny buttons but got none?** Check bundle `approvals.notify`,
+  `channel bind`, guards `mode: gated` (not `enforced`), and audit records for
+  `approval-requested`. Operator can still type `approve` / `deny` in chat.
 - **A turn `failure`?** Read `failure.category` + `phase` to see which boundary
   broke (model, tool, guard, …) before assuming the model is at fault.
 

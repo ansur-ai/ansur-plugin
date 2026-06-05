@@ -38,15 +38,19 @@ Quick check: `ansur whoami` (errors with `no_tenant` ⇒ setup not finished).
 |---|------|---------|-----------|
 | 1 | See what's already set up | `ansur whoami` · `ansur bundle list` | `no_tenant` ⇒ `references/initial-setup.md` |
 | 2 | Get the business / role in plain language | ask the user | drives every choice below |
-| 3 | Connect the systems the job needs | `ansur connector list --available` → `ansur connector add <sys>` | `references/guards.md` |
+| 3 | Connect the systems the job needs | `ansur connector list --available` → `ansur connector add <sys>` | `references/guards.md` · **SAP: `references/sap.md`** |
+| 3b | Provision the guards policy repo (once) | `ansur guards init` (after step 3) | `references/guards.md` — seeds `<system>/` per *connected* connector |
 | 4 | Create the employee (repo + scaffold + clone) | `ansur bundle create <agent>` | `references/bundle.md` |
 | 5 | Author the bundle | edit the cloned repo | `references/bundle.md` + the primitive refs |
-| 6 | Ship it (live at the next idle turn, ~<30s) | `git commit` + `git push` | git is versioning — no `bundle write` |
-| 7 | Wire a channel | `ansur channel bind telegram <token>` | token from @BotFather; routes with no restart |
+| 5b | Human-in-the-loop (if writes need approval) | guards repo + `manifest.yaml` | `references/guards.md` + `references/bundle.md` |
+| 6 | Ship **both** repos | `git commit` + `git push` in bundle **and** guards clones | manifest + policy are separate pushes |
+| 7 | Wire a channel | `ansur channel bind telegram <token> [--agent <name>]` | token from @BotFather; **required** for approval buttons (see gotchas) |
 | 8 | Observe + iterate | `ansur trace <agent>` | `references/trace.md` |
 
-Iterate by looping **5 → 6 → 8**. `connector add` (step 3) must precede the
-bundle author declaring that connector in `connectors.yaml`.
+Iterate by looping **5 → 6 → 8**. `connector add` (step 3) must precede
+`guards init` (3b) and the bundle declaring that connector in `connectors.yaml`.
+If you connect a *new* system after `guards init`, add `<system>/rules.yaml`
+manually in the guards repo (init does not re-run).
 
 ## What's in a bundle — the primitives
 
@@ -76,11 +80,12 @@ you're authoring:
 
 ## CLI surface
 
-`login · init · whoami · github connect|status · connector list [--available]|add|probe|remove · bundle list|create|clone · channel bind telegram · secret set|list · guard pins|pin|unpin · trace`
+`login · init · whoami · github connect|status · connector list [--available]|add|probe|remove [--instance <name>] [--config '<json>'] · guards init|clone|validate [dir] · guard pins|pin|unpin · bundle list|create|clone [--repo owner/name] · channel bind telegram <token> [--agent <name>] · secret set|list · trace <agent> [--since …]`
 
-(`secret set` reads the value from **stdin**, never argv. `guard pin <system> <ref>`
-freezes a wire guard's policy at a commit for staged release / rollback —
-see `references/guards.md`.)
+(`secret set` reads the value from **stdin**, never argv. `guards validate` runs the
+guard's own policy loader offline — run before every guards-repo push.
+`guard pin <system> <ref>` freezes a wire guard's policy at a commit for staged
+release / rollback — see `references/guards.md`. Global flags: `--json`, `--endpoint`.)
 
 ## Gotchas
 
@@ -99,3 +104,23 @@ Grow this list every time something trips you.
 - **`browser` connector parses but opens no wire egress today** — it's a separate
   broker track, not wired to the wire-guard reconciler. `gmail` / `web-search` /
   `sap` are the live wire guards. See `references/guards.md`.
+- **Gated writes need two files, not one.** `<tenant>/guards/<system>/rules.yaml`
+  with `mode: gated` + `approve_if` (e.g. Gmail send → `approve_if: "true"`) **and**
+  the bundle's `manifest.yaml` `approvals.notify` (Telegram `channel` + `address`).
+  Either alone ⇒ no buttoned approve flow. `bundle create` does not scaffold either;
+  add them when the role can send email or other guarded writes.
+- **Human-in-the-loop requires `mode: gated`, not `enforced`.** Under `enforced`,
+  a `needs_approval` verdict (including `approve_if`) is a terminal **403** — no
+  hold, no buttons. Only `gated` waits for a human.
+- **Connector `kind:` ≠ guards-repo directory.** `connectors.yaml` uses catalog
+  names (`sap`); policy dirs use wire guard-system names. `sap` alone fans out to
+  **two** dirs — `sap-service-layer/` (writes) **and** `sap-hana/` (reads). See the
+  mapping table in `references/guards.md` and the full recipe in `references/sap.md`.
+- **Approval buttons need `channel bind`.** Proactive notify sends via the bound
+  bot's token to `approvals.notify.address` — bind first; the operator must have
+  `/start`ed that bot in Telegram before DMs/buttons can arrive.
+- **SAP is two guard-systems behind one connector** (`sap-service-layer/` writes +
+  `sap-hana/` reads), with read/write-specific secrets and a **required** read role
+  mapping (reads 403 without it). Connect with
+  `ansur connector add sap --config '{"upstreamOrigin":…,"allowedCompanyDbs":[…],"defaultCompanyDb":…}'`.
+  Don't wing it — follow **`references/sap.md`**.
