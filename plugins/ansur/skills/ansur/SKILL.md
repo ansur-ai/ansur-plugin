@@ -80,12 +80,16 @@ you're authoring:
 
 ## CLI surface
 
-`login · init · whoami · github connect|status · connector list [--available]|add|probe|remove [--instance <name>] [--config '<json>'] · guards init|clone|validate [dir] · guard pins|pin|unpin · bundle list|create|clone [--repo owner/name] · channel bind telegram <token> [--agent <name>] · secret set|list · trace <agent> [--since …]`
+`login · init · whoami · github connect|status · connector list [--available]|add|probe|remove [--instance <name>] [--config '<json>'] · guards init|clone|validate [dir] · guard pins|pin|unpin|status|rollback · bundle list|create|clone [--repo owner/name] · channel bind telegram <token> [--agent <name>] · secret set|list · trace <agent> [--since …]`
 
 (`secret set` reads the value from **stdin**, never argv. `guards validate` runs the
-guard's own policy loader offline — run before every guards-repo push.
-`guard pin <system> <ref>` freezes a wire guard's policy at a commit for staged
-release / rollback — see `references/guards.md`. Global flags: `--json`, `--endpoint`.)
+guard's own policy loader **and the policy's behavioral `examples:`** offline (a
+rule that diverges from its declared intent fails) — run before every guards-repo
+push; the **control-plane publish gate** runs the same check at the daemon before
+advancing the live ref, so a bad push never crashloops the guard. `guard pin
+<system> <ref>` freezes a wire guard's policy at a commit; `guard status <system>`
+shows intent → enforced → published history; `guard rollback <system>` reverts to a
+prior published SHA — see `references/guards.md`. Global flags: `--json`, `--endpoint`.)
 
 ## Gotchas
 

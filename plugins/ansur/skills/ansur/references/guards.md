@@ -171,6 +171,70 @@ Two things the model hinges on:
 Author rules under `mode: observe` first, watch the audit for `wouldBlock`
 flags, then flip to `gated` / `enforced` once the rules cover the real traffic.
 
+### Prove intent with `examples:` (behavioral verification)
+
+A rule is the only written form of its author's intent, so nothing checks that
+what it *does* matches what you *meant*. A rule can be valid, compile, and still
+be silently wrong — the real `require-ten-suffix` rule
+(`reject_if: "!matches(payload.body, '.*10$')"`) rejected **every** email,
+because `matches` is **glob, not regex**: `.*10$` means "ends with a literal `$`,"
+which no body matches.
+
+To catch this, a policy carries a second, independent statement of intent: an
+`examples:` list of concrete request → verdict pairs, run against the **real
+engine**. They live **inline in `rules.yaml`**, alongside `rules:`:
+
+```yaml
+mode: gated
+rules:
+  - name: po-requires-origin
+    on: { method: POST, path: /ProductionOrders }
+    decode: json
+    reject_if: "not payload.fields.ProductionOrderOriginEntry"
+    reason: "a production order must reference a sales order"
+examples:
+  - name: a PO with an origin is allowed
+    request:
+      method: POST
+      path: /b1s/v2/ProductionOrders          # the RAW path; canonicalPath is applied for you
+      body: '{"ProductionOrderOriginEntry":42}'
+    agent: planlama-bot                        # optional — for an agents:-scoped rule
+    expect: accept                             # accept | reject | needs_approval
+  - name: a PO without an origin is rejected
+    request: { method: POST, path: /b1s/v2/ProductionOrders, body: '{}' }
+    agent: planlama-bot
+    expect: reject
+```
+
+Why this works: the example is written in a form that **cannot share the rule's
+bug** — `"Ben 10" → accept` passes through your intent directly, never through the
+rule's glob. If the rule and the example disagree, that disagreement is the bug.
+
+- **`expect`** is the verdict the engine must return (`accept` / `reject` /
+  `needs_approval`).
+- **`agent:`** sets the acting agent for an `agents:`-scoped rule (omit for shared
+  rules — a placeholder agent then matches only un-scoped rules).
+- **`given:`** stubs anything a rule would otherwise fetch, so the test does no
+  real I/O: `given.preflight: {…}` (the upstream state a `preflight:` rule reads),
+  `given.preflightError: "…"` (force the preflight to fail, to test
+  `on_preflight_error`), and `given.judge: { verdict: reject }` (a judge rule's
+  answer — the runner can't call an LLM offline). The judge example that carries
+  signal is one where `expect` **differs** from `given.judge.verdict` (e.g. a
+  deterministic `reject_if` overriding an `accept` judge).
+
+Examples are **enforced, not advisory**. `ansur guards validate` runs them; so does
+the **control-plane publish gate** — the daemon runs them offline before advancing
+the live ref, so a policy whose examples fail **never advances** (the guard keeps
+serving the last good version; it never crashloops on a bad push). The running
+guard re-checks on hot-reload too, as a drift catch. So a wrong rule fails your
+`validate` (and CI) before push, and even if it reaches the box the gate refuses
+to publish it, never silently applied.
+
+> **Don't blind-regen examples.** Changing a rule that breaks its examples is the
+> system working: it forces you to confirm the behavior change is what you meant.
+> Fix the rule or *deliberately* update the example — never auto-edit examples to
+> match new behavior, which deletes their value.
+
 ### Human-in-the-loop — `approve_if` in `<tenant>/guards` (load-bearing)
 
 When the employee can **write** to an external system (Gmail send, SAP POST, …)
@@ -203,8 +267,11 @@ via the mode fallback — but an explicit `approve_if` rule is clearer, shows up
 audit with your `reason:`, and is what you want for “always approve sends.”
 
 Validate before push: `ansur guards validate`, then `git commit && git push` in the
-guards repo. See `packages/gmail-wire-adapter/examples/gmail/rules.yaml` for richer
-examples (competitor blocks, judges).
+guards repo — it runs both the structural loader **and** the policy's `examples:`
+against the real engine (see "Prove intent with `examples:`" above). See
+`packages/gmail-wire-adapter/examples/gmail/rules.yaml` and
+`packages/sap-sl-adapter/examples/sap-service-layer/rules.yaml` for richer policies
+(competitor blocks, judges) with worked `examples:`.
 
 **2. Bundle notify destination** — guard buttons are delivered to
 `manifest.yaml` → `approvals.notify` in the **agent bundle** (not the guards repo).
@@ -252,8 +319,12 @@ gated on this one-time step:
 ansur guards init        # create <accountLogin>/guards, seed an audit-only
                           # <system>/rules.yaml per connected system, then clone it
 ansur guards clone       # later: re-clone the repo to edit (native git auth)
-ansur guards validate    # offline check before every push (same loader as boot)
+ansur guards validate    # offline check before every push: structural loader
+                          # AND behavioral examples, same engine as the publish gate
 ```
+
+`guards init` also seeds a `.github/workflows/guards-validate.yml` so the same
+check runs in CI on every PR to the guards repo — a bad rule never reaches the box.
 
 Run **`guards init` after `connector add`** — it seeds one `<system>/` dir per
 *currently connected* wire guard-system. If the repo already exists,
@@ -268,10 +339,15 @@ no manual access grant. Each `<system>/rules.yaml` lands as `mode: observe` with
 commented examples; edit, then — **ALWAYS run `ansur guards validate` before you
 `git commit && git push`.** It runs the guard's *own* policy loader against every
 `<system>/rules.yaml` (invalid `decode:`, malformed expression, missing judge
-`prompt_file`) and exits non-zero on any error. This is not optional: a bad
-`rules.yaml` makes the guard **fail closed (CrashLoopBackOff) at boot**, so the
-push silently does NOT take effect — the guard keeps serving its last-good policy
-and you get no signal. Validate first, fix what it reports, then push. The running
+`prompt_file`) **and** runs the policy's `examples:` against the real engine (a
+rule whose behavior diverges from its declared intent — the `.*10$` class — fails
+here), exiting non-zero on any error. It is still worth running because it is the
+**author-time signal**: the control-plane publish gate keeps a bad push from ever
+advancing the live ref (the guard keeps serving the last good version — no
+CrashLoopBackOff, no silent fall-open), but the push then just doesn't take effect
+and `ansur guard status <system>` shows the system serving behind HEAD. `validate`
+(and the CI it seeds) tells you *why* before you push, instead of after.
+Validate first, fix what it reports, then push. The running
 guard rolls onto the new policy on its next reconcile (or pin a commit with
 `ansur guard pin`). If GitHub is connected to a **personal account** (not an org),
 the App can't auto-create the repo — `guards init` returns an actionable error.
@@ -300,16 +376,29 @@ So `gmail`, `web-search`, and `sap` (reads + writes) are what actually works
 through the wire path. Don't tell a customer `browser` or `slack` "just works"
 like gmail.
 
-## Production policy pins — `ansur guard pin`
+## Production policy versions — `ansur guard pin|status|rollback`
 
-A wire guard tracks `main` HEAD of the `<tenant>/guards` repo by default. For
-staged release / rollback, freeze its policy at a commit:
+A wire guard tracks `main` HEAD of the `<tenant>/guards` repo by default. Every
+effective ref passes the **control-plane publish gate** — the daemon resolves it
+to a SHA, verifies it offline (the same loader + `examples:` engine as `guards
+validate`), and only advances the live ref on a pass. So "enforced" is always the
+last gate-approved commit.
 
 ```bash
 ansur guard pins                      # show current pins
-ansur guard pin sap <commit-sha>      # freeze sap's policy at that commit
+ansur guard pin sap <commit-sha>      # freeze sap's policy at that commit (staged release)
 ansur guard unpin sap                 # resume tracking main
+ansur guard status sap                # intent (pinned) → enforced (live SHA) → published history;
+                                      #   flags a system serving BEHIND a HEAD that failed the gate
+ansur guard rollback sap [<sha>]      # revert to a prior published SHA (the previous version by
+                                      #   default) — flows through the same gate
 ```
+
+A bad push (malformed, or whose `examples:` fail) **does not advance and does not
+take the guard offline** — the gate keeps serving the last good SHA, and `guard
+status` shows the system behind HEAD until the push is fixed. `rollback` is itself
+a normal publish (repoint the pin → re-verify → advance), recorded as a new entry
+in the published history.
 
 ## Author does vs. platform does
 
