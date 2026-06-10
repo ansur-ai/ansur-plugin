@@ -66,8 +66,8 @@ jq 'select(.assetsCommitted) | {at:.startedAt, .assetsCommitted}' "$F"
 
 - **Wrong answer?** Pull the turn, read `reasoning` + `toolCalls`. Missing a fact
   ⇒ seed `memory/`. Missing a step ⇒ tighten `prompt.md` or add a `skill`.
-- **A call was `blocked`?** A hook or guard stopped it — check `references/hooks.md`
-  / `references/guards.md` and the matching `audit` record.
+- **A call was `blocked`?** A hook or guard stopped it — check `bundle/hooks.md`
+  / `guards/guards.md` and the matching `audit` record.
 - **Expected Approve/Deny buttons but got none?** Check bundle `approvals.notify`,
   `channel bind`, guards `mode: gated` (not `enforced`), and audit records for
   `approval-requested`. Operator can still type `approve` / `deny` in chat.

@@ -12,16 +12,16 @@ runtime** (bash runs directly, TypeScript via `tsx`, markdown/YAML read as-is) �
 | `manifest.yaml` | Identity + runtime config (model, reasoning, …). | **Yes** — loader throws if missing. |
 | `prompt.md` | The one customer-authored system prompt → the employee's *identity*. Everything else in the prompt stack is platform-owned. **Most of your work goes here.** | **Yes** in practice. |
 | `tools.yaml` | A `platform:` tool list. **Vestigial** — the platform injects the full tool set regardless; this can only add, never remove. | **Must exist & parse**; content does nothing. |
-| `connectors.yaml` | Which of the tenant's connectors this agent exposes (`kind:` entries). Gates sandbox egress + triggers guard creation. Absent ⇒ no external systems. | Optional. → `references/guards.md` |
-| `skills/<name>/SKILL.md` | On-demand playbooks the employee loads via the `skill` tool. | Optional. → `references/skills.md` |
-| `memory/` | Mutable markdown the employee reads/writes; committed back across turns. | Optional. → `references/memory.md` |
-| `hooks/{pre-tool,post-tool,stop}/` | Bash gates on the employee's agent loop. | Optional. → `references/hooks.md` |
+| `connectors.yaml` | Which of the tenant's connectors this agent exposes (`kind:` entries). Gates sandbox egress + triggers guard creation. Absent ⇒ no external systems. | Optional. → `guards/guards.md` |
+| `skills/<name>/SKILL.md` | On-demand playbooks the employee loads via the `skill` tool. | Optional. → `bundle/skills.md` |
+| `memory/` | Mutable markdown the employee reads/writes; committed back across turns. | Optional. → `bundle/memory.md` |
+| `hooks/{pre-tool,post-tool,stop}/` | Bash gates on the employee's agent loop. | Optional. → `bundle/hooks.md` |
 | `oracles/*.ts` | Post-delivery success/failure scoring. | Optional (advanced). |
 | `README.md` | Human-readable; not consumed at runtime. | Optional. |
 
 > **Guard policy is NOT in the bundle.** It lives in a separate per-tenant repo,
 > `<tenant>/guards` (one repo for all the tenant's agents). The bundle only
-> *names* the systems via `connectors.yaml`. → `references/guards.md`
+> *names* the systems via `connectors.yaml`. → `guards/guards.md`
 
 Decide where a constraint belongs by **when it acts**:
 **hooks = pre-action (shape the loop) · guards = at-the-wire (mediate external calls) · oracles = post-delivery (score the outcome).**
@@ -54,7 +54,7 @@ but the buttoned flow you want for email/SAP writes will not fire.
 
 Set this in the **bundle** whenever you author gated guard policy (e.g. Gmail
 `approve_if: "true"` in `<tenant>/guards/gmail/rules.yaml` — see
-`references/guards.md`). The `address` is the operator's Telegram **chat id** (not
+`guards/guards.md`). The `address` is the operator's Telegram **chat id** (not
 the bot token from `channel bind`). Typical ways to learn it: message @userinfobot,
 or send a test message to the bound bot and read `chat.id` from `ansur trace`.
 
@@ -153,7 +153,7 @@ auth). Use it to re-open a bundle on a fresh machine.
   (Telegram chat id) **and** author the matching policy in `<tenant>/guards`;
   `git push`.
   (Guard *policy* goes in the separate `<tenant>/guards` repo — see
-  `references/guards.md`.)
+  `guards/guards.md`.)
 - **Platform (automatic):** provisions the repo + scaffold; injects the full tool
   set; supplies every prompt layer except identity; on push advances the pointer +
   hot-reloads; generates sandbox egress from `connectors.yaml`; reconciles guards;

@@ -13,7 +13,7 @@ fast, deterministic, in-process gates on the employee's *intent*.
 > lint/typecheck/test hook sees the actual edited file. Its message is injected
 > back as lowest-tier user text: it advises, never commands. None of this is a
 > security boundary; the load-bearing boundary on a real external side effect is
-> the **guard** (`references/guards.md`), not a hook.
+> the **guard** (`guards/guards.md`), not a hook.
 
 ## Where scripts live
 
@@ -133,6 +133,6 @@ If it must not be bypassable, it's a guard, not a hook.
 - **`exit 0` + garbage stdout = fail-closed deny**, not a lenient allow. Emit
   valid JSON or nothing.
 
-> For the precise wire-protocol semantics (exit codes, fail-closed handling,
-> per-phase parsing), the authoritative source is the loader itself —
-> `packages/daemon/src/bundle-hooks/loader.ts`.
+> Wire-protocol summary: exit 0 with valid JSON (or empty stdout) is honored;
+> a non-zero exit, unparseable stdout, or a timeout is a **fail-closed deny** on
+> gate phases — never a lenient allow. When in doubt, emit nothing and exit 0.

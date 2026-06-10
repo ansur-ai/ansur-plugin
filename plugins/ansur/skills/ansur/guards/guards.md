@@ -70,7 +70,7 @@ capability connectors, on the OAuth callback for `gmail`, on the credential past
 for `sap`. You don't provision anything.
 
 > `github` is **not** in this catalog. It's a control-plane credential
-> (`ansur github connect`) — see `references/initial-setup.md`. Never put it in
+> (`ansur github connect`) — see `setup/initial-setup.md`. Never put it in
 > `connectors.yaml`.
 
 ## `connectors.yaml` — what the employee may reach
@@ -102,7 +102,7 @@ bundle and `connector add` use the **catalog** name; the guards repo and
 Author policy under the **right-hand** path. A `guards/gmail/` dir does nothing
 for an agent that only connects `sap`. **`sap` fans out to two guard-systems** —
 one connector, two policy dirs — and the read path (`sap-hana/`) needs an
-agent→role `groups:` mapping or it 403s. See **`references/sap.md`**.
+agent→role `groups:` mapping or it 403s. See **`guards/sap.md`**.
 
 > The bundle's `connectors.yaml` says *which* systems the employee may reach.
 > Guard **policy** (what each call may do) lives in a **different repo** — see below.
@@ -268,14 +268,14 @@ audit with your `reason:`, and is what you want for “always approve sends.”
 
 Validate before push: `ansur guards validate`, then `git commit && git push` in the
 guards repo — it runs both the structural loader **and** the policy's `examples:`
-against the real engine (see "Prove intent with `examples:`" above). See
-`packages/gmail-wire-adapter/examples/gmail/rules.yaml` and
-`packages/sap-sl-adapter/examples/sap-service-layer/rules.yaml` for richer policies
-(competitor blocks, judges) with worked `examples:`.
+against the real engine (see "Prove intent with `examples:`" above). To author
+richer policy (field comparisons, live-state preflights, thresholds), the full
+rule grammar is **`guards/rules.md`** — author from the customer's job spec in
+that language; there is no canned policy to copy.
 
 **2. Bundle notify destination** — guard buttons are delivered to
 `manifest.yaml` → `approvals.notify` in the **agent bundle** (not the guards repo).
-That wiring is documented in `references/bundle.md`. Also required on the platform
+That wiring is documented in `bundle/bundle.md`. Also required on the platform
 side: **`ansur channel bind telegram …`** for that agent — proactive notify sends
 through the **bound bot's token** to `approvals.notify.address` (the chat id can
 be the operator's private chat, not the group the employee serves).
@@ -329,9 +329,9 @@ check runs in CI on every PR to the guards repo — a bad rule never reaches the
 Run **`guards init` after `connector add`** — it seeds one `<system>/` dir per
 *currently connected* wire guard-system. If the repo already exists,
 `guards init` returns `repo_not_empty` — use `guards clone` and add missing
-`<system>/` trees by hand (copy the shape from `guards init`'s scaffold or the
-examples under `packages/*-wire-adapter/examples/`). Connecting a new system later
-does **not** auto-create its policy dir.
+`<system>/` trees by hand (mirror an already-seeded system's shape: a
+`mode: observe` `rules.yaml`; author rules per `guards/rules.md`). Connecting a
+new system later does **not** auto-create its policy dir.
 
 `guards init` requires `ansur github connect` first (the owner comes from the
 installation). The App **creates** the repo, so it auto-joins the installation —
@@ -368,7 +368,7 @@ token — see `bundle.md`), then re-runs `guards init`.
 |---|---|---|---|
 | `gmail` | oauth-identity | Gmail REST | **Live.** Injects the tenant's OAuth bearer. |
 | `web-search` | capability | Exa | **Live.** Platform-owned key; strips any agent-supplied `x-api-key`. The customer never sees "exa." |
-| `sap` | byok-identity | tenant's SAP Service Layer (writes, 50000) + HANA (reads, 30015) | **Live, both paths.** Writes via `sap-service-layer/`, reads via `sap-hana/`. Set connection config at connect time: `connector add sap --config '{"upstreamOrigin":…,"allowedCompanyDbs":[…],"defaultCompanyDb":…}'`. Two policy dirs + a required read role mapping + a HANA grant — the full recipe is **`references/sap.md`**. |
+| `sap` | byok-identity | tenant's SAP Service Layer (writes, 50000) + HANA (reads, 30015) | **Live, both paths.** Writes via `sap-service-layer/`, reads via `sap-hana/`. Set connection config at connect time: `connector add sap --config '{"upstreamOrigin":…,"allowedCompanyDbs":[…],"defaultCompanyDb":…}'`. Two policy dirs + a required read role mapping + a HANA grant — the full recipe is **`guards/sap.md`**. |
 | `browser` | capability | Browserbase (CDP) | **Separate broker track — NOT wired to the wire-guard reconciler.** `kind: browser` parses but opens no wire egress today. |
 | `slack` | oauth-identity | — | **Catalog only** — wire adapter pending. |
 

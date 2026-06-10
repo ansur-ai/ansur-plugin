@@ -19,7 +19,7 @@ Two nested harnesses, one level apart:
 The **bundle is the employee**: a single git repo (one per agent) holding the
 prompt, the systems it may touch (`connectors.yaml`), its skills, hooks, and
 memory. (Guard *policy* lives in a separate per-tenant `<tenant>/guards` repo —
-see `references/guards.md`.) Editing the employee = editing files in that repo and
+see `guards/guards.md`.) Editing the employee = editing files in that repo and
 pushing. There is no web UI and no "save" API — **git is the versioning model.**
 
 ## First time on this machine?
@@ -27,7 +27,7 @@ pushing. There is no web UI and no "save" API — **git is the versioning model.
 If `ansur` isn't installed, the user isn't logged in, or no tenant/GitHub link
 exists yet, do the one-time setup first:
 
-→ **`references/initial-setup.md`** (install the CLI + plugin → `login` → `init`
+→ **`setup/initial-setup.md`** (install the CLI + plugin → `login` → `init`
 the tenant → `github connect`). Run it once; everything below assumes it's done.
 
 Quick check: `ansur whoami` (errors with `no_tenant` ⇒ setup not finished).
@@ -36,16 +36,16 @@ Quick check: `ansur whoami` (errors with `no_tenant` ⇒ setup not finished).
 
 | # | Step | Command | Read first |
 |---|------|---------|-----------|
-| 1 | See what's already set up | `ansur whoami` · `ansur bundle list` | `no_tenant` ⇒ `references/initial-setup.md` |
+| 1 | See what's already set up | `ansur whoami` · `ansur bundle list` | `no_tenant` ⇒ `setup/initial-setup.md` |
 | 2 | Get the business / role in plain language | ask the user | drives every choice below |
-| 3 | Connect the systems the job needs | `ansur connector list --available` → `ansur connector add <sys>` | `references/guards.md` · **SAP: `references/sap.md`** |
-| 3b | Provision the guards policy repo (once) | `ansur guards init` (after step 3) | `references/guards.md` — seeds `<system>/` per *connected* connector |
-| 4 | Create the employee (repo + scaffold + clone) | `ansur bundle create <agent>` | `references/bundle.md` |
-| 5 | Author the bundle | edit the cloned repo | `references/bundle.md` + the primitive refs |
-| 5b | Human-in-the-loop (if writes need approval) | guards repo + `manifest.yaml` | `references/guards.md` + `references/bundle.md` |
+| 3 | Connect the systems the job needs | `ansur connector list --available` → `ansur connector add <sys>` | `guards/guards.md` · **SAP: `guards/sap.md`** |
+| 3b | Provision the guards policy repo (once) | `ansur guards init` (after step 3) | `guards/guards.md` — seeds `<system>/` per *connected* connector |
+| 4 | Create the employee (repo + scaffold + clone) | `ansur bundle create <agent>` | `bundle/bundle.md` |
+| 5 | Author the bundle | edit the cloned repo | `bundle/bundle.md` + the primitive refs |
+| 5b | Author guard policy from the job's rules | edit the guards repo clone | **`guards/rules.md` (the grammar)** + `guards/guards.md` (modes); approvals also need `manifest.yaml` (`bundle/bundle.md`) |
 | 6 | Ship **both** repos | `git commit` + `git push` in bundle **and** guards clones | manifest + policy are separate pushes |
 | 7 | Wire a channel | `ansur channel bind telegram <token> [--agent <name>]` | token from @BotFather; **required** for approval buttons (see gotchas) |
-| 8 | Observe + iterate | `ansur trace <agent>` | `references/trace.md` |
+| 8 | Observe + iterate | `ansur trace <agent>` | `operate/trace.md` |
 
 Iterate by looping **5 → 6 → 8**. `connector add` (step 3) must precede
 `guards init` (3b) and the bundle declaring that connector in `connectors.yaml`.
@@ -59,11 +59,12 @@ you're authoring:
 
 | Primitive | What it is | Ref |
 |---|---|---|
-| **the bundle** | the container: files, `manifest.yaml`, the create→push→reload lifecycle | `references/bundle.md` |
-| **guards / connectors** | how the employee reaches external systems, safely, at the wire | `references/guards.md` |
-| **skills** | on-demand playbooks the employee loads when a task matches | `references/skills.md` |
-| **hooks** | bash gates that shape the employee's own agent loop | `references/hooks.md` |
-| **memory** | what the employee remembers and accumulates across conversations | `references/memory.md` |
+| **the bundle** | the container: files, `manifest.yaml`, the create→push→reload lifecycle | `bundle/bundle.md` |
+| **guards / connectors** | how the employee reaches external systems, safely, at the wire | `guards/guards.md` |
+| **guard rules** | the rule LANGUAGE — turn the job's "never X / hold Y for a human" into `rules.yaml` | `guards/rules.md` |
+| **skills** | on-demand playbooks the employee loads when a task matches | `bundle/skills.md` |
+| **hooks** | bash gates that shape the employee's own agent loop | `bundle/hooks.md` |
+| **memory** | what the employee remembers and accumulates across conversations | `bundle/memory.md` |
 
 ## Hard rules
 
@@ -89,7 +90,7 @@ push; the **control-plane publish gate** runs the same check at the daemon befor
 advancing the live ref, so a bad push never crashloops the guard. `guard pin
 <system> <ref>` freezes a wire guard's policy at a commit; `guard status <system>`
 shows intent → enforced → published history; `guard rollback <system>` reverts to a
-prior published SHA — see `references/guards.md`. Global flags: `--json`, `--endpoint`.)
+prior published SHA — see `guards/guards.md`. Global flags: `--json`, `--endpoint`.)
 
 ## Gotchas
 
@@ -104,10 +105,10 @@ Grow this list every time something trips you.
 - **`manifest.yaml` `version:` does nothing.** Don't bump it expecting an effect.
   Roll back by pinning an earlier commit or `git revert` + push.
 - **Skills are directories, not flat files** — `skills/<name>/SKILL.md` with a
-  `description:` frontmatter, not `skills/foo.md`. See `references/skills.md`.
+  `description:` frontmatter, not `skills/foo.md`. See `bundle/skills.md`.
 - **`browser` connector parses but opens no wire egress today** — it's a separate
   broker track, not wired to the wire-guard reconciler. `gmail` / `web-search` /
-  `sap` are the live wire guards. See `references/guards.md`.
+  `sap` are the live wire guards. See `guards/guards.md`.
 - **Gated writes need two files, not one.** `<tenant>/guards/<system>/rules.yaml`
   with `mode: gated` + `approve_if` (e.g. Gmail send → `approve_if: "true"`) **and**
   the bundle's `manifest.yaml` `approvals.notify` (Telegram `channel` + `address`).
@@ -119,7 +120,7 @@ Grow this list every time something trips you.
 - **Connector `kind:` ≠ guards-repo directory.** `connectors.yaml` uses catalog
   names (`sap`); policy dirs use wire guard-system names. `sap` alone fans out to
   **two** dirs — `sap-service-layer/` (writes) **and** `sap-hana/` (reads). See the
-  mapping table in `references/guards.md` and the full recipe in `references/sap.md`.
+  mapping table in `guards/guards.md` and the full recipe in `guards/sap.md`.
 - **Approval buttons need `channel bind`.** Proactive notify sends via the bound
   bot's token to `approvals.notify.address` — bind first; the operator must have
   `/start`ed that bot in Telegram before DMs/buttons can arrive.
@@ -127,4 +128,4 @@ Grow this list every time something trips you.
   `sap-hana/` reads), with read/write-specific secrets and a **required** read role
   mapping (reads 403 without it). Connect with
   `ansur connector add sap --config '{"upstreamOrigin":…,"allowedCompanyDbs":[…],"defaultCompanyDb":…}'`.
-  Don't wing it — follow **`references/sap.md`**.
+  Don't wing it — follow **`guards/sap.md`**.
