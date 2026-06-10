@@ -32,8 +32,8 @@ What the runtime loader actually reads (everything else is ignored):
 
 ```yaml
 agent_id: bdr                 # REQUIRED — the agent's identity
-model: claude-opus-4-7        # REQUIRED — supports model:reasoning, e.g. gpt-5.4-mini:high
-reasoning: medium             # optional — none | low | medium | high
+model: claude-opus-4-7        # REQUIRED — supports model:reasoning, e.g. gpt-5.4-mini:xhigh
+reasoning: medium             # optional — none | low | medium | high | xhigh
 displayName: "BDR"            # optional — falls back to agent_id
 provider: codex               # optional — derived from the model when omitted
 role: sales                   # optional

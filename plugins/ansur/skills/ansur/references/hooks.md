@@ -5,9 +5,14 @@ agent-loop boundary the daemon runs the matching script, speaking the same wire
 protocol as Claude Code hooks. Hooks shape **how the employee works** — they are
 fast, deterministic, in-process gates on the employee's *intent*.
 
-> Hooks run **on the daemon**, with daemon privileges — same trust level as the
-> prompt and skills. They are control-flow gates, **not** a security boundary and
-> **not** sandboxed. The load-bearing boundary on a real external side effect is
+> **Gates run on the daemon; the `post-tool` observer runs in the sandbox.**
+> `pre-tool` and `stop` deny / rewrite / block, so they always run **on the
+> daemon** with daemon privileges — a gate the untrusted sandbox runs is not a
+> gate. `post-tool` cannot deny, so in pooled mode it runs **inside the
+> sandbox** with `cwd=/workspace` — where the agent's `edit`/`write` land — so a
+> lint/typecheck/test hook sees the actual edited file. Its message is injected
+> back as lowest-tier user text: it advises, never commands. None of this is a
+> security boundary; the load-bearing boundary on a real external side effect is
 > the **guard** (`references/guards.md`), not a hook.
 
 ## Where scripts live
@@ -37,6 +42,10 @@ other / timeout / malformed JSON / over output cap → fail-closed (denied)
 
 Limits: **5s** wall-time, **64 KB** output cap. Exceed either and the script is
 killed and **fails closed** — don't call slow network APIs from a `pre-tool` gate.
+
+Runtime: `bash`, `jq`, `git`, `ripgrep`, `python3`, and plain `node` are on
+`PATH` (daemon and sandbox share one image). **`tsx` is not** — write hooks in
+bash (+ `jq`/`python3`) or call plain `node` on a `.js` file.
 
 ### Per-phase context (stdin) → decision (stdout)
 
@@ -106,6 +115,9 @@ If it must not be bypassable, it's a guard, not a hook.
 
 - **`post-tool` only fires after a real tool call returns** — a pure-text /
   prompt-knowledge turn has nothing to fire after.
+- **A `post-tool` hook sees the workspace via `cwd=/workspace`** in pooled mode
+  (it runs in the sandbox). Resolve edited files by relative path; don't hard-code
+  a daemon-side absolute path.
 - **`post-tool` effects aren't persisted to the trace** — they're injected into
   the live conversation. Verify a post-tool hook by a side effect or an echo
   token, **not** by grepping the trace.
@@ -121,5 +133,6 @@ If it must not be bypassable, it's a guard, not a hook.
 - **`exit 0` + garbage stdout = fail-closed deny**, not a lenient allow. Emit
   valid JSON or nothing.
 
-> For deeper hook authoring, the ansur repo's `bundle-hooks` skill is the
-> authoritative source.
+> For the precise wire-protocol semantics (exit codes, fail-closed handling,
+> per-phase parsing), the authoritative source is the loader itself —
+> `packages/daemon/src/bundle-hooks/loader.ts`.
