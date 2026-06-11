@@ -266,6 +266,12 @@ Without a matching rule under `gated`, an uncovered write still holds for approv
 via the mode fallback — but an explicit `approve_if` rule is clearer, shows up in
 audit with your `reason:`, and is what you want for “always approve sends.”
 
+Add `present:` to the rule to give the operator a **plain-language card** (in
+their own language) instead of the generic `system / rule / scrubbed-summary`
+body — it renders from the request's decoded fields
+(`Tedarikçi: {{ payload.fields.CardCode }}`, `Tutar: {{ payload.fields.DocTotal | default('—') }}`).
+Display-only and never affects the verdict; full syntax + filters in `guards/rules.md`.
+
 Validate before push: `ansur guards validate`, then `git commit && git push` in the
 guards repo — it runs both the structural loader **and** the policy's `examples:`
 against the real engine (see "Prove intent with `examples:`" above). To author

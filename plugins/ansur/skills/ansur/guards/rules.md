@@ -31,6 +31,7 @@ rules:
     approve_if: "…"          # expression; true ⇒ hold for human (gated) / 403 (enforced)
     reason: "…"              # human + agent readable; rides the 403 and the audit record
     on_preflight_error: reject   # or needs_approval — verdict when the preflight FETCH fails
+    present: "…"             # optional: the operator's approval-card body (see below)
 ```
 
 A rule needs at least one of `reject_if` / `approve_if` (or `judge:` — see
@@ -59,6 +60,65 @@ matches `on: { path: /PurchaseInvoices }`. Non-canonical paths (e.g. a legacy
 Discover the payload shape empirically: run one real call under `mode: observe`
 and read the audit record (`ansur trace`), or ask the operator for a sample
 document. **Never guess field semantics** — see "Authoring discipline" below.
+
+## `present:` — the operator's approval card
+
+When a rule **holds** a request for a human (a matched `approve_if`, or a judge
+`needs_approval`), the operator gets an Approve/Deny card. By default that card is
+the generic `system / rule / reason / <scrubbed summary>` layout. `present:`
+replaces the **body** with a plain-language card you author — in the operator's
+own language — rendered from the **same evaluation context** the rule reads:
+
+```yaml
+  - name: ap-invoice-needs-approval
+    on: { method: POST, path: /PurchaseInvoices }
+    decode: json
+    approve_if: "true"
+    reason: "Satıcı faturası — insan onayı bekliyor"
+    present: |
+      🔐 Onay gerekli — Satıcı Faturası
+      Tedarikçi: {{ payload.fields.CardCode }}
+      Şirket: {{ payload.fields.U_Sirket }} · Fatura No: {{ payload.fields.NumAtCard }}
+      Tutar: {{ payload.fields.DocTotal | default('hesaplanacak') }}
+      Kalem: {{ payload.fields.DocumentLines | length }} satır
+```
+
+So instead of `{"entity":"PurchaseInvoices","bodyBytes":812}`, the operator reads
+`Tedarikçi: …, Tutar: … TRY, Şirket: ANSA` and can actually decide.
+
+**Syntax.** Literal text interleaved with `{{ path | filter | filter:arg }}`:
+
+- `{{ payload.fields.CardCode }}` — a dotted path into the **same** `payload` /
+  `request` / `context` roots the table above lists (`{{ context.agent }}`,
+  `{{ request.path }}`). No expression logic — just a path and optional filters.
+- Filters: `{{ x | default('—') }}` (fallback when the field is missing/empty —
+  use it for server-computed fields like SAP's `DocTotal` that the POST body
+  often omits), `{{ x | truncate:120 }}` (cap a long field), `{{ xs | length }}`
+  (array/string length).
+
+**Two guarantees, by design:**
+
+- **Compile-time strict.** A malformed template (unbalanced `{{ }}`, an unknown
+  filter, a bad arg) **fails `ansur guards validate`** and the policy load — same
+  loud gate as a bad `approve_if`. Last-good policy stays live.
+- **Render-time total.** At the hold it never throws: a missing path renders its
+  `| default(…)` or empty, the rest of the card intact. `present:` is
+  **display-only** — it never affects the verdict, so a render fault degrades to
+  the legacy card and can never reject a write.
+
+**Notes.**
+- Renders **only** on a hold (`needs_approval`). A rule that accepts or rejects
+  never shows it.
+- `payload.fields.*` need the rule's `decode:` (a SAP write rule already declares
+  `decode: json`). Don't add `decode:` just for the card — `request.*` /
+  `context.*` resolve regardless, and decode changes verdict behavior (an
+  unparseable body fails closed *before* the card renders).
+- It is **not** PII-scrubbed — it is author-curated. You choose which fields it
+  shows; the values you template land in the durable approval event (TEL
+  retention). A field that must not persist simply isn't templated. (The scrubbed
+  audit `payloadSummary` is a separate, untouched layer.)
+- One string, one language (Turkish for a Turkish operator). Per-language maps
+  aren't a thing yet — one operator, one card.
 
 ## Expression grammar
 
