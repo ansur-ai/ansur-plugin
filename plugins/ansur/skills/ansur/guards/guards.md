@@ -98,6 +98,7 @@ bundle and `connector add` use the **catalog** name; the guards repo and
 | `gmail` | `gmail/` |
 | `web-search` | `web-search/` |
 | `sap` | `sap-service-layer/` (writes) **and** `sap-hana/` (reads) |
+| `sovos` | `sovos/` |
 
 Author policy under the **right-hand** path. A `guards/gmail/` dir does nothing
 for an agent that only connects `sap`. **`sap` fans out to two guard-systems** —
@@ -375,12 +376,13 @@ token — see `bundle.md`), then re-runs `guards init`.
 | `gmail` | oauth-identity | Gmail REST | **Live.** Injects the tenant's OAuth bearer. |
 | `web-search` | capability | Exa | **Live.** Platform-owned key; strips any agent-supplied `x-api-key`. The customer never sees "exa." |
 | `sap` | byok-identity | tenant's SAP Service Layer (writes, 50000) + HANA (reads, 30015) | **Live, both paths.** Writes via `sap-service-layer/`, reads via `sap-hana/`. Set connection config at connect time: `connector add sap --config '{"upstreamOrigin":…,"allowedCompanyDbs":[…],"defaultCompanyDb":…}'`. Two policy dirs + a required read role mapping + a HANA grant — the full recipe is **`guards/sap.md`**. |
+| `sovos` | byok-identity | Sovos / FİT Bulut e-Invoice WS (public HTTPS) | **Live.** Per-company HTTP Basic injection keyed off each request's `VKN_TCKN`. **Requires** a `companies` map at connect time: `connector add sovos --config '{"companies":{"<VKN>":"<company>"}}'` + a paste of `{company:{username,password}}` — without the map the guard fails closed at boot. Full recipe: **`guards/sovos.md`**. |
 | `browser` | capability | Browserbase (CDP) | **Separate broker track — NOT wired to the wire-guard reconciler.** `kind: browser` parses but opens no wire egress today. |
 | `slack` | oauth-identity | — | **Catalog only** — wire adapter pending. |
 
-So `gmail`, `web-search`, and `sap` (reads + writes) are what actually works
-through the wire path. Don't tell a customer `browser` or `slack` "just works"
-like gmail.
+So `gmail`, `web-search`, `sap` (reads + writes), and `sovos` are what actually
+works through the wire path. Don't tell a customer `browser` or `slack` "just
+works" like gmail.
 
 ## Production policy versions — `ansur guard pin|status|rollback`
 

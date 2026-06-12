@@ -38,7 +38,7 @@ Quick check: `ansur whoami` (errors with `no_tenant` ⇒ setup not finished).
 |---|------|---------|-----------|
 | 1 | See what's already set up | `ansur whoami` · `ansur bundle list` | `no_tenant` ⇒ `setup/initial-setup.md` |
 | 2 | Get the business / role in plain language | ask the user | drives every choice below |
-| 3 | Connect the systems the job needs | `ansur connector list --available` → `ansur connector add <sys>` | `guards/guards.md` · **SAP: `guards/sap.md`** |
+| 3 | Connect the systems the job needs | `ansur connector list --available` → `ansur connector add <sys>` | `guards/guards.md` · **SAP: `guards/sap.md`** · **Sovos: `guards/sovos.md`** |
 | 3b | Provision the guards policy repo (once) | `ansur guards init` (after step 3) | `guards/guards.md` — seeds `<system>/` per *connected* connector |
 | 4 | Create the employee (repo + scaffold + clone) | `ansur bundle create <agent>` | `bundle/bundle.md` |
 | 5 | Author the bundle | edit the cloned repo | `bundle/bundle.md` + the primitive refs |
@@ -129,3 +129,8 @@ Grow this list every time something trips you.
   mapping (reads 403 without it). Connect with
   `ansur connector add sap --config '{"upstreamOrigin":…,"allowedCompanyDbs":[…],"defaultCompanyDb":…}'`.
   Don't wing it — follow **`guards/sap.md`**.
+- **Sovos (e-invoice) needs a `companies` map at connect time** — it routes each
+  request to a per-company credential by the payload's `VKN_TCKN`. Connect with
+  `ansur connector add sovos --config '{"companies":{"<VKN>":"<company>"}}'` + a
+  paste of `{company:{username,password}}`. **Omit the map and the guard fails
+  closed at boot.** Follow **`guards/sovos.md`**.
