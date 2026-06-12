@@ -44,6 +44,9 @@ approvals:                    # REQUIRED when guards use gated + approve_if (see
     kind: chat                 # only "chat" is wired today
     channel: telegram
     address: "123456789"       # operator Telegram chat id (numeric string)
+  approvers:                   # optional — extra identities allowed to approve
+    - "905551112233"           # bare phone / JID / chat id (normalized to digits)
+    - "5669124511"
 ```
 
 **`approvals.notify` — where Approve/Deny buttons go (load-bearing for gated writes).**
@@ -62,6 +65,17 @@ or send a test message to the bound bot and read `chat.id` from `ansur trace`.
 *approval* inbox (often the same human's private chat id). **Buttons still require
 `channel bind`** — the platform sends them with the bound bot's token. The
 operator must `/start` that bot in Telegram before it can DM them at `address`.
+
+**`approvals.approvers` — extra accounts allowed to approve (optional).** The
+`notify` address is always implicitly an approver. List additional identities here
+when more than one person may resolve a hold, or to enable the **conversation
+relay**: if a guarded call originates from an approver's own chat, the Approve/Deny
+buttons are also pushed *into that conversation* — and the relay fires **only** for
+chats whose identity is in this list (the privilege gate). Each entry is a bare
+phone / JID / chat id; values are normalized to digits, so `905551112233`,
+`905551112233@s.whatsapp.net`, and the raw JID all match the same person. Today only
+`chat`-surface identities (Telegram, WhatsApp) route — `web inbox` / `push` are not
+yet wired.
 
 `manifest.yaml` `agent_id` must match the name passed to `ansur bundle create
 <agent>` (and the `channel bind --agent` target when the tenant has multiple
