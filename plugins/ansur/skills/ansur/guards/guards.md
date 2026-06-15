@@ -48,26 +48,29 @@ reject, or a downstream outage all stop the request.
 A **connector** is "this tenant has connected system X; here's where its credential
 lives." Connecting one is what makes a guard exist. Three classes:
 
-| Class | Holds customer data? | Credential | Friction at `connector add` | Examples |
-|---|---|---|---|---|
-| **capability** | No — a commodity | **Platform-owned** shared key | **Zero** — instant | `web-search`, `browser` |
-| **oauth-identity** | Yes — their account | Customer's own, via platform OAuth | Click "allow" in a browser | `gmail`, `slack` |
-| **byok-identity** | Yes — their account | Customer's own, **pasted** | Paste an API key/token | `sap` |
+| Class | Holds customer data? | Credential | Friction at `connector add` |
+|---|---|---|---|
+| **capability** | No — a commodity | **Platform-owned** shared key | **Zero** — instant |
+| **oauth-identity** | Yes — their account | Customer's own, via platform OAuth | Click "allow" in a browser |
+| **byok-identity** | Yes — their account | Customer's own, **pasted** | Paste an API key / login JSON |
+
+**Don't enumerate connectors from memory — discover them.** The catalog is the
+source of truth and carries everything you need (class, the paste shape, the policy
+dir(s)):
 
 ```bash
-ansur connector list --available        # the catalog: system + class + description
-ansur connector list --available --json # adds credentialHint — and is the source of
-                                         # truth for valid connectors.yaml `kind:` values
-ansur connector add web-search           # capability — instant, no credential
-ansur connector add gmail                # oauth — opens browser, you click allow, CLI polls
-ansur connector add sap                  # byok — CLI reads the token from stdin
-ansur connector probe gmail              # verify token + guard health end-to-end
-ansur connector remove gmail             # disconnect → the guard is torn down
+ansur connector list --available --json   # per system: class, description,
+                                          #   credentialHint (the exact paste shape),
+                                          #   guardSystems (the <system>/ policy dir(s))
+ansur connector add <system>              # capability → instant; oauth → browser;
+                                          #   byok → reads the credentialHint JSON from stdin
+ansur connector probe <system>            # verify credential + guard health end-to-end
+ansur connector remove <system>           # disconnect → the guard is torn down
 ```
 
 **The guard self-creates** when the connector becomes *connected*: immediately for
-capability connectors, on the OAuth callback for `gmail`, on the credential paste
-for `sap`. You don't provision anything.
+capability connectors, on the OAuth callback for oauth-identity, on the credential
+paste for byok-identity. You don't provision anything.
 
 > `github` is **not** in this catalog. It's a control-plane credential
 > (`ansur github connect`) — see `setup/initial-setup.md`. Never put it in
@@ -89,21 +92,21 @@ connectors:
 Validation: every `kind` must come from `ansur connector list --available`;
 duplicate `kind` is rejected (one guard per kind).
 
-**Connector `kind:` vs guards-repo `<system>/` dir** — these names differ. The
-bundle and `connector add` use the **catalog** name; the guards repo and
-`ansur guard pin` use the **wire guard-system** name:
+**Connector `kind:` ≠ guards-repo `<system>/` dir** — the names can differ, and one
+connector can fan out to **several** dirs. Don't guess and don't trust a memorized
+table — the mapping is in the catalog: each entry's **`guardSystems`** is its policy
+dir(s).
 
-| `connectors.yaml` / `connector add` | Guards repo dir / `guard pin` |
-|---|---|
-| `gmail` | `gmail/` |
-| `web-search` | `web-search/` |
-| `sap` | `sap-service-layer/` (writes) **and** `sap-hana/` (reads) |
-| `sovos` | `sovos/` |
+```bash
+ansur connector list --available --json   # → e.g. "sap": guardSystems ["sap-service-layer","sap-hana"]
+                                          #        "gmail": guardSystems ["gmail"]
+```
 
-Author policy under the **right-hand** path. A `guards/gmail/` dir does nothing
-for an agent that only connects `sap`. **`sap` fans out to two guard-systems** —
-one connector, two policy dirs — and the read path (`sap-hana/`) needs an
-agent→role `groups:` mapping or it 403s. See **`guards/sap.md`**.
+Author `rules.yaml` under each **`guardSystems`** entry, never under the connector
+`kind`. A `guards/gmail/` dir does nothing for an agent that only connects `sap`.
+The one that fans out is **`sap`** — `kind: sap` → **two** dirs `sap-service-layer/`
+(writes) + `sap-hana/` (reads), and the read path needs an agent→role `groups:`
+mapping or it 403s. See **`guards/sap.md`**.
 
 > The bundle's `connectors.yaml` says *which* systems the employee may reach.
 > Guard **policy** (what each call may do) lives in a **different repo** — see below.

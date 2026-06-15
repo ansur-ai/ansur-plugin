@@ -107,8 +107,10 @@ Grow this list every time something trips you.
 - **Skills are directories, not flat files** — `skills/<name>/SKILL.md` with a
   `description:` frontmatter, not `skills/foo.md`. See `bundle/skills.md`.
 - **`browser` connector parses but opens no wire egress today** — it's a separate
-  broker track, not wired to the wire-guard reconciler. `gmail` / `web-search` /
-  `sap` are the live wire guards. See `guards/guards.md`.
+  broker track, not wired to the wire-guard reconciler. A connector is a live wire
+  guard iff its `guardSystems` is non-empty — discover that via
+  `ansur connector list --available --json`, don't memorize a list. See
+  `guards/guards.md`.
 - **Gated writes need two files, not one.** `<tenant>/guards/<system>/rules.yaml`
   with `mode: gated` + `approve_if` (e.g. Gmail send → `approve_if: "true"`) **and**
   the bundle's `manifest.yaml` `approvals.notify` (Telegram `channel` + `address`).
@@ -134,3 +136,10 @@ Grow this list every time something trips you.
   `ansur connector add sovos --config '{"companies":{"<VKN>":"<company>"}}'` + a
   paste of `{company:{username,password}}`. **Omit the map and the guard fails
   closed at boot.** Follow **`guards/sovos.md`**.
+
+> Connectors with **extra ceremony beyond the credentialHint** get a recipe doc
+> above (`sap` = two guard-systems + read role; `sovos` = the `companies` map). A
+> plain byok connector (e.g. `email` → `imap-smtp/`, a generic IMAP/SMTP mailbox)
+> needs none — `connector list --available --json` carries its `credentialHint` (the
+> paste shape) and `guardSystems` (the policy dir). Don't write a recipe per
+> connector; add one only when there's ceremony the catalog can't express.

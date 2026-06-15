@@ -43,19 +43,21 @@ ansur connector add sap --config '{
   "allowedCompanyDbs": ["FACTORY_A", "FACTORY_B", "FACTORY_C"],
   "defaultCompanyDb": "FACTORY_A"
 }'
-#   add prompts for a credential token — vestigial for SAP (paste any non-empty
-#   value; the Service Layer login uses the secrets below, not this token).
+#   add then prompts for the credential — paste the Service Layer (B1) WRITE login
+#   as JSON: {"username":"<b1-user>","password":"<b1-pass>"}. The connect
+#   materializes it into the sap.username / sap.password secrets the write guard
+#   reads, and REFUSES to connect (400) without both — there is no "connected but
+#   uncredentialed" state, and the write guard crashloops if it boots without them.
+#   No sap.companyDb — the schema is per-request (x-sap-company-db), allow-listed
+#   by the config above. (Equivalent manual seed, instead of the paste:
+#     printf '%s\n' '<b1-user>' | ansur secret set sap.username
+#     printf '%s\n' '<b1-pass>' | ansur secret set sap.password)
 
-# 2. Secrets — WRITE login (Service Layer). No sap.companyDb — the schema is
-#    per-request (x-sap-company-db), allow-listed by the config above.
-printf '%s\n' '<b1-user>' | ansur secret set sap.username
-printf '%s\n' '<b1-pass>' | ansur secret set sap.password
-
-# 3. Secret — READ login (HANA reader, keyed by role):
+# 2. Secret — READ login (HANA reader, keyed by role):
 printf '%s\n' '{"super_read":{"user":"SAP_GUARD_SUPER_READER","password":"<pw>"}}' \
   | ansur secret set sap-hana.users
 
-# 4. Guards repo (scaffolds BOTH sap-service-layer/ and sap-hana/):
+# 3. Guards repo (scaffolds BOTH sap-service-layer/ and sap-hana/):
 ansur guards init
 #   → EDIT sap-hana/rules.yaml — under groups:, map your agent to the read role:
 #       groups:
@@ -63,7 +65,7 @@ ansur guards init
 #   → sap-service-layer/rules.yaml: leave `mode: observe` (writes pass) or add rules
 ansur guards validate && (cd <guards-clone> && git add -A && git commit -m sap && git push)
 
-# 5. Bundle: declare the connector in connectors.yaml → `- kind: sap` → commit + push.
+# 4. Bundle: declare the connector in connectors.yaml → `- kind: sap` → commit + push.
 ```
 
 `secret set` reads the value from **stdin** — pipe it WITH a trailing newline
